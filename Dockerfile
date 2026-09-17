@@ -37,4 +37,15 @@ RUN hf download $REPO loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safet
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
-RUN ls -la /comfyui/models/diffusion_models /comfyui/models/text_encoders /comfyui/models/vae /comfyui/models/loras
+# Install our handler in place of the base one, keeping the original beside it.
+# start.sh runs `python -u /handler.py`, so ours has to sit at that exact path;
+# it loads the original from COMFY_HANDLER_PATH and adds video output, which the
+# base handler does not return at all.
+RUN mv /handler.py /handler_base.py
+COPY handler.py /handler.py
+ENV COMFY_HANDLER_PATH=/handler_base.py
+ENV COMFY_OUTPUT_DIR=/comfyui/output
+
+RUN ls -la /comfyui/models/diffusion_models /comfyui/models/text_encoders /comfyui/models/vae /comfyui/models/loras && \
+    python -c "compile(open('/handler.py').read(), '/handler.py', 'exec')" && \
+    test -f /handler_base.py
