@@ -1,24 +1,32 @@
 """Serverless entry point.
 
-The real work is done by the handler inside the base image
-(runpod/worker-comfyui), which already speaks the ComfyUI job format: it takes
-`input.workflow` plus optional `input.images` and returns the outputs. This
-file exists because RunPod's GitHub build looks for `runpod.serverless.start()`
-in the repository itself and will not deploy without it — it cannot see a
-handler that is inherited from the base image.
+Two jobs:
 
-So: find that handler, and start it. If the base module starts the worker on
-import (some versions do), this never gets past the import and that is fine.
+1. RunPod's GitHub build refuses to deploy unless it finds
+   `runpod.serverless.start()` in the repository itself. It cannot see the
+   handler inherited from the runpod/worker-comfyui base image, so this file
+   finds that handler and starts it.
+
+2. The base handler only returns `images` from a workflow's outputs. This one
+   renders video, so anything the base handler misses is picked up here: the
+   output directory is checked for video files written while the job ran, and
+   each is returned base64-encoded alongside the images.
 """
 
+import base64
 import importlib.util
 import os
 import sys
+import time
 
 import runpod
 
-# Where the base image keeps its handler. Overridable in case the path moves.
 BASE_HANDLER = os.environ.get("COMFY_HANDLER_PATH", "/handler.py")
+OUTPUT_DIR = os.environ.get("COMFY_OUTPUT_DIR", "/comfyui/output")
+VIDEO_SUFFIXES = (".mp4", ".webm", ".mkv", ".gif", ".webp", ".mov")
+# A base64 payload has to come back inside the job response, and RunPod caps
+# that. Anything larger is reported by name rather than silently dropped.
+MAX_RETURN_BYTES = int(os.environ.get("MAX_VIDEO_RETURN_BYTES", 8 * 1024 * 1024))
 
 
 def _load_base_handler():
@@ -31,9 +39,63 @@ def _load_base_handler():
     return getattr(module, "handler", None)
 
 
+def _videos_written_since(since):
+    found = []
+    for root, _dirs, files in os.walk(OUTPUT_DIR):
+        for name in files:
+            if not name.lower().endswith(VIDEO_SUFFIXES):
+                continue
+            path = os.path.join(root, name)
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            if st.st_mtime < since:
+                continue
+            found.append((path, st.st_size))
+    found.sort(key=lambda p: os.path.getmtime(p[0]))
+    return found
+
+
+def _encode(path, size):
+    if size > MAX_RETURN_BYTES:
+        return {
+            "filename": os.path.basename(path),
+            "type": "too_large",
+            "bytes": size,
+            "data": None,
+            "note": "larger than MAX_VIDEO_RETURN_BYTES; set BUCKET_ENDPOINT_URL "
+                    "to have outputs uploaded instead",
+        }
+    with open(path, "rb") as fh:
+        return {
+            "filename": os.path.basename(path),
+            "type": "base64",
+            "bytes": size,
+            "data": base64.b64encode(fh.read()).decode("utf-8"),
+        }
+
+
+def make_handler(base):
+    def wrapped(job):
+        started = time.time() - 1  # a second of slack for clock granularity
+        result = base(job)
+        if not isinstance(result, dict):
+            return result
+        videos = [_encode(p, s) for p, s in _videos_written_since(started)]
+        if videos:
+            result["videos"] = videos
+        elif not result.get("images"):
+            # Neither kind of output: say so rather than returning an empty success.
+            result.setdefault("errors", []).append(
+                f"no images and no video files found in {OUTPUT_DIR} after the run"
+            )
+        return result
+
+    return wrapped
+
+
 def _missing(job):
-    # Never fail silently: if the base handler is not where we expect it, say so
-    # in the job result rather than returning an empty success.
     return {
         "error": f"the ComfyUI handler was not found at {BASE_HANDLER}; "
                  "set COMFY_HANDLER_PATH to its location"
@@ -41,5 +103,5 @@ def _missing(job):
 
 
 if __name__ == "__main__":
-    handler = _load_base_handler() or _missing
-    runpod.serverless.start({"handler": handler})
+    base = _load_base_handler()
+    runpod.serverless.start({"handler": make_handler(base) if base else _missing})
