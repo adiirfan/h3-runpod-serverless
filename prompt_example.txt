@@ -1,0 +1,26 @@
+subject_definitions:
+<Video 1> is the source video for the target video edit.
+<Subject 1> is the woman in <Picture 1>, featuring straight wine-red hair in a rear ponytail extending to the shoulder blades, collarbone-length front tendrils, an off-center right part, and an asymmetrical split fringe; deep blue irises beneath thick upper lash lines angled downward 25 degrees toward the nose; thick straight eyebrows angled downward at 35 degrees; rimless glasses; a triangular jaw tapering to a pointed chin; a minimized stroke nose; and bare unpainted lips over a narrow horizontal mouth.
+<Subject 2> is the reclining woman in <Video 1>, including her bare torso, reclined posture, right arm bent with a red wristwatch, and listening performance.
+<Subject 3> is the indoor setting with couch cushions and dim ambient lighting.
+<Audio 1> is the original audio track from <Video 1>.
+
+summary:
+[video editing + reference generation + audio reuse] The target video is an edited version of <Video 1>. The head and hair of the reclining woman (<Subject 2>) are replaced with <Subject 1> across a single shot, while her body, reclined pose, the background setting (<Subject 3>), and original soundtrack (<Audio 1>) are fully preserved.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): attribute_transfer - transfers wine-red hair with collarbone tendrils and shoulder-blade ponytail, deep blue irises, rimless glasses, and angular jawline onto <Subject 2>.
+<Subject 2> (appears in [Shot 1]): fully_preserved - the reclining posture, nude torso, arm position, red wristwatch, and foreground censor bar remain intact.
+<Subject 3> (appears in [Shot 1]): fully_preserved - the couch, dark background, and soft lighting remain unchanged.
+<Video 1> (timing, framing, and camera structure): fully_preserved - the framing and timing follow <Video 1>.
+<Audio 1>: fully_copy - copied entirely without alteration.
+
+detailed_description:
+Anime illustration style with soft ambient shading; the frame carries no subtitle, watermark, or overlaid text.
+[Shot 1] Medium close-up of <Subject 2> reclining on the couch cushions on screen-left, head tilted slightly back and facing screen-right. Warm directional light illuminates the right side of her face and bare shoulders matching the surrounding room. Her wine-red hair rests against the cushions, with sharp triangular locks falling to the collarbones and an asymmetrical fringe across the forehead. At 00:00.000, 00:02.002, 00:04.296, and 00:06.298, the visible slivers of her deep blue irises remain half-lidded, gazing toward screen-right beneath straight angled brows, while her bare unpainted lips stay slightly parted in a fixed resting position without speaking. Her right hand remains raised near her chin with the red wristwatch visible, and the foreground pixelated censor bar remains in place throughout.
+
+overall_soundscape:
+<Audio 1> is carried over unchanged as the entire soundtrack, where the dialogue is from an off-screen only speaker.
+
+non_diegetic_music:
+N/A

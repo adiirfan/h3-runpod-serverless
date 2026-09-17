@@ -1,8 +1,9 @@
 # MiniMax H3 "anime" workflow as a RunPod serverless endpoint.
 #
-# The models are pulled from Hugging Face during the BUILD, on RunPod's
-# builders, where the pull runs at roughly 1 GB/s. Nothing is uploaded from
-# home: a 54 GB image over a 1.4 MB/s domestic uplink would take eleven hours.
+# The models are pulled from Hugging Face when a WORKER STARTS, not at build
+# time. Building them in works, but the resulting 56 GB image took 20 minutes to
+# export and ship, and RunPod kills a build at 30. Fetching at start costs about
+# four minutes on a genuinely new worker and nothing on a warm one.
 #
 # Everything in the workflow is stock ComfyUI. The three custom node packs the
 # local copy uses are all droppable: the KJ preview node and its taeh3 model
@@ -14,24 +15,6 @@ FROM runpod/worker-comfyui:5.10.0-base
 # file over a build that can retry is a bad trade.
 RUN pip install --no-cache-dir "huggingface_hub[hf_transfer]"
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
-
-ARG REPO=Comfy-Org/MiniMax-H3
-
-# One RUN per file: a failed 27 GB download then costs only itself on a rebuild.
-RUN hf download $REPO diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors \
-      --local-dir /comfyui/models && \
-    mv /comfyui/models/diffusion_models/*.safetensors /comfyui/models/diffusion_models/ || true
-
-RUN hf download $REPO text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors \
-      --local-dir /comfyui/models
-
-RUN hf download $REPO vae/minimax_h3_video_vae_fp16.safetensors --local-dir /comfyui/models
-RUN hf download $REPO vae/minimax_h3_audio_vae_fp32.safetensors --local-dir /comfyui/models
-
-# The 4-step turbo LoRA. The local box uses a pruned build that is not on the
-# Hub; this is Comfy-Org's official ref2v 4-step, same purpose.
-RUN hf download $REPO loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors \
-      --local-dir /comfyui/models
 
 # ffmpeg is what SaveVideo and LoadVideo shell out to.
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && \
@@ -46,6 +29,13 @@ COPY handler.py /handler.py
 ENV COMFY_HANDLER_PATH=/handler_base.py
 ENV COMFY_OUTPUT_DIR=/comfyui/output
 
-RUN ls -la /comfyui/models/diffusion_models /comfyui/models/text_encoders /comfyui/models/vae /comfyui/models/loras && \
-    python -c "compile(open('/handler.py').read(), '/handler.py', 'exec')" && \
-    test -f /handler_base.py
+# The models are fetched when a worker starts, so the image stays small enough
+# to build and ship inside RunPod's 30-minute build limit.
+COPY fetch_models.sh /fetch_models.sh
+RUN chmod +x /fetch_models.sh
+
+RUN python -c "compile(open('/handler.py').read(), '/handler.py', 'exec')" && \
+    test -f /handler_base.py && test -x /fetch_models.sh && \
+    bash -n /fetch_models.sh
+
+CMD ["/bin/bash", "-c", "/fetch_models.sh && exec /start.sh"]
